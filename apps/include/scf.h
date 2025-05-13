@@ -30,6 +30,7 @@ enum scf_opcode {
     IPC_OP_CLONE = 56,
     IPC_OP_FORK = 57,
     IPC_OP_EXIT = 60,
+    IPC_OP_UINTR_INIT = 100,
     IPC_OP_UNKNOWN = 0xff,
 };
 
@@ -78,5 +79,7 @@ int pop_syscall_request(struct syscall_queue_buffer *buf, uint16_t *out_index,
                         struct scf_descriptor *out_desc);
 int push_syscall_response(struct syscall_queue_buffer *buf, uint16_t index,
                           uint64_t ret_val);
+
+int do_sys_write(uint64_t *args);
 
 #endif /* !_SCF_H */

@@ -10,13 +10,13 @@ int main()
 {
     printf("Hello NimbOS!\n");
 
-    // Check For reserved space
-    if (mmap((void*)0x0, NIMBOS_SIZE, PROT_NONE, MAP_SHARED | MAP_FIXED | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
-        printf("User space address [0x0, %lx] not reserved.\n", (size_t)NIMBOS_SIZE);
-        return -1;
-    }
+    // // Check For reserved space
+    // if (mmap((void*)0x0, NIMBOS_SIZE, PROT_NONE, MAP_SHARED | MAP_FIXED | MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
+    //     printf("User space address [0x0, %lx] not reserved.\n", (size_t)NIMBOS_SIZE);
+    //     return -1;
+    // }
 
-    munmap((void*)0x0, NIMBOS_SIZE);
+    // munmap((void*)0x0, NIMBOS_SIZE);
 
     // Nimbos kernel virtual address
     void* nimbos_kernel_virt_addr = (void *)SHADOW_KERNEL_PADDR_TO_VADDR(NIMBOS_KERNEL_BASE_PADDR);
@@ -41,7 +41,7 @@ int main()
         return fd;
     }
 
-    // printf("NimbOS device opened wsith fd %d\n", fd);
+    printf("NimbOS device opened wsith fd %d\n", fd);
 
     for (;;) {
         // printf("Sleep %d...\n", i);

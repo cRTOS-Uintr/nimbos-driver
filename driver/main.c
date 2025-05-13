@@ -3,6 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
+#include <linux/io.h>
 
 #include "file_ops.h"
 #include "hypercall.h"

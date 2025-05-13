@@ -1,6 +1,6 @@
-obj-y := syscall.o scf.o
+obj-y := syscall.o scf.o uintr.o
 
-always := ulib.a
+always-y := ulib.a
 
 OBJECTS := $(addprefix $(obj)/,$(obj-y))
 

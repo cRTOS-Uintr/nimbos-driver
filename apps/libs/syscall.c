@@ -9,14 +9,20 @@
 
 #include "nimbos.h"
 #include "scf.h"
+#include <syslog.h>
+#define _GNU_SOURCE
 
+#include <x86gprintrin.h>
+#include <syscall.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <uintr.h>
 
 #define BUF_SIZE 1024
 
 static int thread_count = 1;
+static int uintr_fd = -1;
 
 void print_maps() {
     FILE *fp = fopen("/proc/self/maps", "r");
@@ -66,6 +72,17 @@ static void *read_thread_fn(void *arg)
     return NULL;
 }
 
+int do_sys_write(uint64_t *args) {
+    int fd = (int)args[0];
+    char *buf = (char *)args[1];
+    size_t len = (size_t)args[2];
+    // printf("Shadow: write fd=%d, buf=%lx, len=%lu\n", fd, (uint64_t)buf, len);
+    int ret = write(fd, buf, len);
+    // printf("Shadow: write ret=%d\n", ret);
+    assert(ret == (int)len);
+    return ret;
+}
+
 void poll_requests(void)
 {
     uint16_t desc_index;
@@ -83,14 +100,7 @@ void poll_requests(void)
             break;
         }
         case IPC_OP_WRITE: {
-            uint64_t *args = desc.args;
-            int fd = (int)args[0];
-            char *buf = (char *)args[1];
-            size_t len = (size_t)args[2];
-            // printf("Shadow: write fd=%d, buf=%lx, len=%lu\n", fd, (uint64_t)buf, len);
-            int ret = write(fd, buf, len);
-            // printf("Shadow: write ret=%d\n", ret);
-            assert(ret == (int)len);
+            int ret = do_sys_write(desc.args);
             push_syscall_response(scf_buf, desc_index, ret);
             break;
         }
@@ -160,6 +170,7 @@ void poll_requests(void)
                 }
 
                 // printf("child pid=%d\n", pid);
+                // printf("parent pid=%d\n", getpid());
                 
                 // push ret
                 push_syscall_response(scf_buf, desc_index, ret);
@@ -168,7 +179,7 @@ void poll_requests(void)
                 // child
                 close(pip[0]);
                 int slot_num, response;
-
+                init_uintr_scf(NULL, -1);
                 int err = ioctl(nimbos_fd, NIMBOS_SETUP_SYSCALL, &slot_num);
                 if (err) {
                     response = err;
@@ -213,6 +224,60 @@ void poll_requests(void)
             }
             break;
         }
+        case IPC_OP_UINTR_INIT: {
+            // syslog(LOG_INFO, "handling ICP_OP_INIT_UINTR");
+            uint64_t *args = desc.args;
+            void *upid_paddr = (void *)args[0];
+            struct uintr_scf_descriptor *uintr_scf_desc = (struct uintr_scf_descriptor *)args[1];
+            // printf("UPID addr: %p uintr_scf_desc: %p\n", upid_paddr, uintr_scf_desc);
+            
+            int uipi_index;
+            // printf("upid_paddr %lx\n", upid_paddr);
+            // printf("calculated UPID addr %p\n", upid_paddr);
+	        uipi_index = uintr_register_sender(upid_paddr, 1<<9);
+            if (uipi_index < 0) {
+                printf("Sender register error\n");
+                push_syscall_response(scf_buf, desc_index, 0);
+                break;
+            }
+            // printf("UITTE index: %d\n", uipi_index);
+            _senduipi(uipi_index);
+
+            uipi_index = uintr_register_sender(upid_paddr, (1<<9) + 1);
+            if (uipi_index < 0) {
+                printf("Scf response sender register error\n");
+                push_syscall_response(scf_buf, desc_index, 0);
+                break;
+            }
+            init_uintr_scf(uintr_scf_desc, uipi_index);
+
+            if (uintr_register_handler(uintr_handler, 0)) {
+                printf("Interrupt handler register error\n");
+                push_syscall_response(scf_buf, desc_index, 0);
+                break;
+            }
+        
+            uintr_fd = uintr_create_fd(0, 0);
+            if (uintr_fd < 0) {
+                printf("Interrupt vector allocation error\n");
+                push_syscall_response(scf_buf, desc_index, 0);
+                break;
+            }
+            // 2. 获取 UPID 地址
+	        uint64_t upid_addr;
+            if (ioctl(uintr_fd, UINTR_GET_UPID_PHYS_ADDR, &upid_addr) < 0) {
+                printf("ioctl failed\n");
+                close(uintr_fd);
+                push_syscall_response(scf_buf, desc_index, 0);
+                break;
+            }
+            // 3. 打印 UPID 地址
+            // printf("Linux UPID address: 0x%llx\n", (unsigned long long)upid_addr);
+
+            _stui();
+            push_syscall_response(scf_buf, desc_index, upid_addr);
+            break;
+        }
         default:
             break;
         }
@@ -250,6 +315,7 @@ int nimbos_setup_syscall()
 
     // handle requests before app starting
     poll_requests();
+    printf("syscall: slot_num=%d\n", slot_num);
 
     return fd;
 }
