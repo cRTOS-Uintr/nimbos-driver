@@ -23,6 +23,7 @@
 
 static int thread_count = 1;
 static int uintr_fd = -1;
+uint64_t upid_addr = 0;
 
 void print_maps() {
     FILE *fp = fopen("/proc/self/maps", "r");
@@ -185,7 +186,7 @@ void poll_requests(void)
                     response = err;
                 } else {
                     set_slot_num(slot_num);
-                    nimbos_setup_syscall_buffers(nimbos_fd, slot_num);
+                    nimbos_setup_syscall_buffers(nimbos_fd, slot_num, &uintr_fd, &upid_addr);
                     response = slot_num;
                 }
 
@@ -225,56 +226,37 @@ void poll_requests(void)
             break;
         }
         case IPC_OP_UINTR_INIT: {
-            // syslog(LOG_INFO, "handling ICP_OP_INIT_UINTR");
-            uint64_t *args = desc.args;
-            void *upid_paddr = (void *)args[0];
-            struct uintr_scf_descriptor *uintr_scf_desc = (struct uintr_scf_descriptor *)args[1];
-            // printf("UPID addr: %p uintr_scf_desc: %p\n", upid_paddr, uintr_scf_desc);
+            // _stui();
+            syslog(LOG_INFO, "handling ICP_OP_INIT_UINTR");
+            // uint64_t *args = desc.args;
+            // void *upid_paddr = (void *)args[0];
+            // struct uintr_scf_descriptor *uintr_scf_desc = (struct uintr_scf_descriptor *)args[1];
+            // // printf("UPID addr: %p uintr_scf_desc: %p\n", upid_paddr, uintr_scf_desc);
             
-            int uipi_index;
-            // printf("upid_paddr %lx\n", upid_paddr);
-            // printf("calculated UPID addr %p\n", upid_paddr);
-	        uipi_index = uintr_register_sender(upid_paddr, 1<<9);
-            if (uipi_index < 0) {
-                printf("Sender register error\n");
-                push_syscall_response(scf_buf, desc_index, 0);
-                break;
-            }
-            // printf("UITTE index: %d\n", uipi_index);
-            _senduipi(uipi_index);
+            // int uipi_index;
+            // // printf("upid_paddr %lx\n", upid_paddr);
+            // // printf("calculated UPID addr %p\n", upid_paddr);
+	        // uipi_index = uintr_register_sender(upid_paddr, 1<<9);
+            // if (uipi_index < 0) {
+            //     printf("Sender register error\n");
+            //     push_syscall_response(scf_buf, desc_index, 0);
+            //     break;
+            // }
+            // // printf("UITTE index: %d\n", uipi_index);
+            // _senduipi(uipi_index);
 
-            uipi_index = uintr_register_sender(upid_paddr, (1<<9) + 1);
-            if (uipi_index < 0) {
-                printf("Scf response sender register error\n");
-                push_syscall_response(scf_buf, desc_index, 0);
-                break;
-            }
-            init_uintr_scf(uintr_scf_desc, uipi_index);
+            // uipi_index = uintr_register_sender(upid_paddr, (1<<9) + 1);
+            // if (uipi_index < 0) {
+            //     printf("Scf response sender register error\n");
+            //     push_syscall_response(scf_buf, desc_index, 0);
+            //     break;
+            // }
+            // init_uintr_scf(uintr_scf_desc, uipi_index);
 
-            if (uintr_register_handler(uintr_handler, 0)) {
-                printf("Interrupt handler register error\n");
-                push_syscall_response(scf_buf, desc_index, 0);
-                break;
-            }
-        
-            uintr_fd = uintr_create_fd(0, 0);
-            if (uintr_fd < 0) {
-                printf("Interrupt vector allocation error\n");
-                push_syscall_response(scf_buf, desc_index, 0);
-                break;
-            }
-            // 2. 获取 UPID 地址
-	        uint64_t upid_addr;
-            if (ioctl(uintr_fd, UINTR_GET_UPID_PHYS_ADDR, &upid_addr) < 0) {
-                printf("ioctl failed\n");
-                close(uintr_fd);
-                push_syscall_response(scf_buf, desc_index, 0);
-                break;
-            }
+            
             // 3. 打印 UPID 地址
             // printf("Linux UPID address: 0x%llx\n", (unsigned long long)upid_addr);
 
-            _stui();
             push_syscall_response(scf_buf, desc_index, upid_addr);
             break;
         }
@@ -297,7 +279,7 @@ int nimbos_setup_syscall()
     if (fd <= 0) {
         return fd;
     }
-    int err = nimbos_setup_syscall_buffers(fd, 0);
+    int err = nimbos_setup_syscall_buffers(fd, 0, &uintr_fd, &upid_addr);
     if (err) {
         fprintf(stderr, "Failed to setup syscall buffers: %d\n", err);
         return err;

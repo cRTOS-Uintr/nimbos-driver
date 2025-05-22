@@ -1,6 +1,23 @@
 #include <stdio.h>
 #include <sys/errno.h>
 
+#include <assert.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define _GNU_SOURCE
+
+#include <x86gprintrin.h>
+#include <syscall.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <inttypes.h>
+#include <uintr.h>
+
 #include "scf.h"
 #include "remap.h"
 
@@ -20,8 +37,27 @@ inline void set_slot_num(int slot_num) {
     g_slot_num = slot_num;
 }
 
-int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num)
+int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num, int *uintr_fd, uint64_t *upid_addr)
 {
+    _stui();
+    int err = uintr_register_handler(uintr_handler, 0);
+    if (err) {
+        fprintf(stderr, "Interrupt handler register error\n");
+        return err;
+    }
+
+    *uintr_fd = uintr_create_fd(0, 0);
+    if (*uintr_fd < 0) {
+        fprintf(stderr, "Interrupt vector allocation error\n");
+        return *uintr_fd;
+    }
+    err = ioctl(*uintr_fd, UINTR_GET_UPID_PHYS_ADDR, upid_addr);
+    if (err < 0) {
+        fprintf(stderr, "ioctl failed\n");
+        close(*uintr_fd);
+        return err;
+    }
+
     uint64_t syscall_queue_buf_paddr = NIMBOS_SYSCALL_QUEUE_BUF_SLOT_PADDR(slot_num);
     syscall_queue_buf_base = (void *)SHADOW_KERNEL_PADDR_TO_VADDR((void *)syscall_queue_buf_paddr);
 

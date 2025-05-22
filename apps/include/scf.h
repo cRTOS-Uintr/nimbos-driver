@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <sys/mman.h>
+#include <x86gprintrin.h>
 
 #include "spin_lock.h"
 #include "remap.h"
@@ -62,7 +63,7 @@ struct syscall_queue_buffer {
 _Static_assert(sizeof(struct syscall_queue_buffer_metadata) == 0xc);
 _Static_assert(sizeof(struct scf_descriptor) == 0x30);
 
-int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num);
+int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num, int *uintr_fd, uint64_t *upid_addr);
 
 int nimbos_reset_syscall_buffer(void);
 
@@ -81,5 +82,7 @@ int push_syscall_response(struct syscall_queue_buffer *buf, uint16_t index,
                           uint64_t ret_val);
 
 int do_sys_write(uint64_t *args);
+
+void poll_requests(void);
 
 #endif /* !_SCF_H */
