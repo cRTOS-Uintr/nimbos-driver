@@ -9,7 +9,7 @@ ifneq ($(DEBUG),)
 endif
 
 module := nimbos_driver
-subdir-y := apps/
+subdir-y := apps
 obj-m := driver/
 
 user:

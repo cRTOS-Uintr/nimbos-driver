@@ -4,6 +4,7 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/io.h>
+#include <linux/kallsyms.h>
 
 #include "file_ops.h"
 #include "hypercall.h"
@@ -11,6 +12,7 @@
 #include "process.h"
 #include "irq.h"
 #include "slot.h"
+#include "compat.h"
 
 struct mem_region rt_region;
 
@@ -38,11 +40,33 @@ static void init_hypercall(void)
     hypercall_use_vmcall = boot_cpu_has(X86_FEATURE_VMX);
 }
 
+#if defined(CONFIG_KALLSYMS_ALL) // && LINUX_VERSION_CODE <
+								 // KERNEL_VERSION(5,7,0)
+#define __RESOLVE_EXTERNAL_SYMBOL(symbol)                                      \
+	symbol##_sym = (void *)generic_kallsyms_lookup_name(#symbol);              \
+	if (!symbol##_sym)                                                         \
+	{                                                                          \
+		pr_err("Failed to resolve symbol %s\n", #symbol);                      \
+		return -EINVAL;                                                        \
+	}                                                                          \
+	else                                                                       \
+	{                                                                          \
+		pr_err(                                                                \
+			"Resolved symbol %s: 0x%lx\n", #symbol,                            \
+			(unsigned long)symbol##_sym);                                      \
+	}
+#else
+#define __RESOLVE_EXTERNAL_SYMBOL(symbol) symbol##_sym = &symbol
+#endif
+#define RESOLVE_EXTERNAL_SYMBOL(symbol...) __RESOLVE_EXTERNAL_SYMBOL(symbol)
+
 static int start_rtos(void)
 {
     int err = 0;
     const struct firmware *nimbos_image;
     void *nimbos_mem;
+    
+	RESOLVE_EXTERNAL_SYMBOL(apic_send_IPI_allbutself);
 
     pr_info("nimbos-driver: RT memory region: [0x%llx-0x%llx], 0x%llx\n", rt_region.start,
             rt_region.start + rt_region.size - 1, rt_region.size);

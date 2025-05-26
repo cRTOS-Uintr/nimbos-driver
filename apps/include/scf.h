@@ -26,12 +26,12 @@ enum scf_opcode {
     IPC_OP_OPEN = 2,
     IPC_OP_CLOSE = 3,
     IPC_OP_STAT = 4,
-    IPC_OP_SYNCMAP = 5,
-    IPC_OP_SYNCUNMAP = 6,
     IPC_OP_CLONE = 56,
     IPC_OP_FORK = 57,
     IPC_OP_EXIT = 60,
     IPC_OP_UINTR_INIT = 100,
+    IPC_OP_SYNCMAP = 253,
+    IPC_OP_SYNCUNMAP = 254,
     IPC_OP_UNKNOWN = 0xff,
 };
 

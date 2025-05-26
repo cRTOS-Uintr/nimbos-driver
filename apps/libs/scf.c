@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <sys/errno.h>
+#include <sys/ioctl.h>
 
 #include <assert.h>
 #include <fcntl.h>
@@ -20,6 +21,7 @@
 
 #include "scf.h"
 #include "remap.h"
+#include "nimbos.h"
 
 #define ALIGN_UP(addr, align) ((addr + align - 1) & ~(align - 1))
 
@@ -179,5 +181,6 @@ int push_syscall_response(struct syscall_queue_buffer *buf, uint16_t index,
 
 end:
     spin_unlock(&buf->meta->lock);
+    ioctl(*get_nimbos_fd(), NIMBOS_NOTIFY);
     return err;
 }

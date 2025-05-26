@@ -2,11 +2,16 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <asm/apic.h>
+
 
 #include "nimbos.h"
 #include "process.h"
 #include "irq.h"
 #include "slot.h"
+
+
+void (*apic_send_IPI_allbutself_sym)(int vec);
 
 static const struct vm_operations_struct
 shadow_physical_vm_ops = {
@@ -62,6 +67,10 @@ long nimbos_ioctl(struct file *file, unsigned int ioctl, unsigned long arg)
     }
     case NIMBOS_EXIT: {
         nimbos_deregister_process(get_current());
+        break;
+    }
+    case NIMBOS_NOTIFY: {
+        apic_send_IPI_allbutself_sym(NIMBOS_NOTIFY_VECTOR);
         break;
     }
     default:
