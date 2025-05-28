@@ -1,6 +1,8 @@
 #ifndef _UINTR_H
 #define _UINTR_H
 
+#include <stdbool.h>
+
 #define __NR_uintr_register_handler	449
 #define __NR_uintr_unregister_handler	450
 #define __NR_uintr_create_fd		451
@@ -22,8 +24,24 @@ struct uintr_scf_descriptor {
     volatile uint64_t ret_val;
 };
 
+/* User Posted Interrupt Descriptor (UPID) */
+struct uintr_upid {
+	struct {
+		uint8_t status;	/* bit 0: ON, bit 1: SN, bit 2-7: reserved */
+		uint8_t reserved1;	/* Reserved */
+		uint8_t nv;		/* Notification vector */
+		uint8_t reserved2;	/* Reserved */
+		uint32_t ndst;	/* Notification destination */
+	} nc __attribute__((packed));		/* Notification control */
+	uint64_t puir;		/* Posted user interrupt requests */
+} __attribute__((aligned(64)));
+
+void notify(bool is_uintr);
+
 void __attribute__ ((interrupt)) uintr_handler(struct __uintr_frame *ui_frame,
     unsigned long long vector);
+
+int register_sender(void);
 
 void init_uintr_scf(struct uintr_scf_descriptor *desc, int response_fd);
 

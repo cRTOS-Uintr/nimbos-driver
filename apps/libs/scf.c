@@ -27,6 +27,15 @@
 
 static void *syscall_queue_buf_base;
 
+static int nimbos_uitte = -1;
+
+static struct uintr_upid nimbos_upid = {
+    .nc.status = 0, // ON
+    .nc.nv = 41,     // Notification vector
+    .nc.ndst = (3<<8),   // Notification destination
+    .puir = 0,         // Posted user interrupt requests
+};
+
 struct syscall_queue_buffer g_syscall_queue_buffer;
 int g_nimbos_fd;
 int g_slot_num;
@@ -39,10 +48,24 @@ inline void set_slot_num(int slot_num) {
     g_slot_num = slot_num;
 }
 
+int register_sender(void) {
+    nimbos_uitte = uintr_register_sender(&nimbos_upid, 1<<9);
+    if (nimbos_uitte < 0) {
+        fprintf(stderr, "Sender register error\n");
+        return nimbos_uitte;
+    }
+    return 0;
+    // fprintf(stdout, "Sender register done %p\n", &nimbos_upid);
+}
+
 int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num, int *uintr_fd, uint64_t *upid_addr)
 {
     _stui();
-    int err = uintr_register_handler(uintr_handler, 0);
+    int err = register_sender();
+    if (err) {
+        return err;
+    }
+    err = uintr_register_handler(uintr_handler, 0);
     if (err) {
         fprintf(stderr, "Interrupt handler register error\n");
         return err;
@@ -161,8 +184,20 @@ end:
     return err;
 }
 
+void notify(bool is_uintr) {
+    // is_uintr = false;
+    if (is_uintr) {
+        nimbos_upid.nc.status = 0;
+        // printf("uintr scf done\n");
+        _senduipi(nimbos_uitte);
+    }
+    else {
+        ioctl(*get_nimbos_fd(), NIMBOS_NOTIFY);
+    }
+}
+
 int push_syscall_response(struct syscall_queue_buffer *buf, uint16_t index,
-                          uint64_t ret_val)
+                          uint64_t ret_val, bool is_uintr)
 {
     int err;
     spin_lock(&buf->meta->lock);
@@ -181,6 +216,6 @@ int push_syscall_response(struct syscall_queue_buffer *buf, uint16_t index,
 
 end:
     spin_unlock(&buf->meta->lock);
-    ioctl(*get_nimbos_fd(), NIMBOS_NOTIFY);
+    notify(is_uintr);
     return err;
 }

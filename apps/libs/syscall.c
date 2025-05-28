@@ -51,6 +51,7 @@ static void *read_thread_fn(void *arg)
 {
     uint64_t* args;
     struct syscall_queue_buffer *scf_buf = get_syscall_queue_buffer();
+    bool is_uintr = ((long)arg) >> 16;
     uint16_t desc_index = (uint16_t)(long)arg;
     struct scf_descriptor *desc = get_syscall_request_from_index(scf_buf, desc_index);
 
@@ -69,7 +70,13 @@ static void *read_thread_fn(void *arg)
     // printf("Shadow: read fd=%d, buf=%lx, len=%lu\n", fd, (uint64_t)buf, len);
     int ret = read(fd, buf, len);
     // assert(ret == args->len);
-    push_syscall_response(scf_buf, desc_index, ret);
+    int err = register_sender();
+    if (err) {
+        push_syscall_response(scf_buf, desc_index, ret, false);
+    }
+    else {
+        push_syscall_response(scf_buf, desc_index, ret, is_uintr);
+    }
     return NULL;
 }
 
@@ -84,7 +91,7 @@ int do_sys_write(uint64_t *args) {
     return ret;
 }
 
-void poll_requests(void)
+void poll_requests(bool is_uintr)
 {
     uint16_t desc_index;
     struct scf_descriptor desc;
@@ -93,16 +100,16 @@ void poll_requests(void)
     pthread_t thread; // FIXME: use global threads pool
 
     while (!pop_syscall_request(scf_buf, &desc_index, &desc)) {
-        // printf("syscall: desc_index=%d, opcode=%d, args=0x%lx\n", desc_index,
+        // printf("syscall: desc_index=%d, opcode=%d, args=0x%p\n", desc_index,
         // desc.opcode, desc.args);
         switch (desc.opcode) {
         case IPC_OP_READ: {
-            pthread_create(&thread, NULL, read_thread_fn, (void *)(long)desc_index);
+            pthread_create(&thread, NULL, read_thread_fn, (void *)(long)desc_index + (((long)is_uintr)<<16));
             break;
         }
         case IPC_OP_WRITE: {
             int ret = do_sys_write(desc.args);
-            push_syscall_response(scf_buf, desc_index, ret);
+            push_syscall_response(scf_buf, desc_index, ret, is_uintr);
             break;
         }
         case IPC_OP_OPEN: {
@@ -112,7 +119,7 @@ void poll_requests(void)
             int mode = (int)args[2];
             // printf("Shadow: open pathname=%s, flags=%x, mode=%o\n", pathname, flags, mode);
             int ret = open(pathname, flags, mode);
-            push_syscall_response(scf_buf, desc_index, ret);
+            push_syscall_response(scf_buf, desc_index, ret, is_uintr);
             break;
         }
         case IPC_OP_CLOSE: {
@@ -120,7 +127,7 @@ void poll_requests(void)
             int fd = (int)args[0];
             // printf("Shadow: close fd=%d\n", fd);
             int ret = close(fd);
-            push_syscall_response(scf_buf, desc_index, ret);
+            push_syscall_response(scf_buf, desc_index, ret, is_uintr);
             break;
         }
         case IPC_OP_SYNCMAP: {
@@ -137,7 +144,7 @@ void poll_requests(void)
             if (mapped_ptr == MAP_FAILED) {
                 ret = -1;
             }
-            push_syscall_response(scf_buf, desc_index, ret);
+            push_syscall_response(scf_buf, desc_index, ret, is_uintr);
             // printf("Shadow: mmap ret=%d, mapped_ptr=%p\n", ret, mapped_ptr);
             break;
         }
@@ -147,7 +154,7 @@ void poll_requests(void)
             // printf("Shadow: unmap vaddr=%p, len=%lu\n", vaddr, args->len);
             int ret = munmap(vaddr, args[1]);
             // int ret = 0;
-            push_syscall_response(scf_buf, desc_index, ret);
+            push_syscall_response(scf_buf, desc_index, ret, is_uintr);
             // printf("Shadow: unmap ret=%d\n", ret);
             break;
         }
@@ -155,7 +162,7 @@ void poll_requests(void)
             int pip[2];
             int err = pipe(pip);
             if (err) {
-                push_syscall_response(scf_buf, desc_index, err);
+                push_syscall_response(scf_buf, desc_index, err, is_uintr);
                 break;
             }
             int pid = fork();
@@ -174,12 +181,13 @@ void poll_requests(void)
                 // printf("parent pid=%d\n", getpid());
                 
                 // push ret
-                push_syscall_response(scf_buf, desc_index, ret);
+                push_syscall_response(scf_buf, desc_index, ret, is_uintr);
                 close(pip[0]);
             } else {
                 // child
                 close(pip[0]);
                 int slot_num, response;
+                thread_count = 1;
                 init_uintr_scf(NULL, -1);
                 int err = ioctl(nimbos_fd, NIMBOS_SETUP_SYSCALL, &slot_num);
                 if (err) {
@@ -202,26 +210,26 @@ void poll_requests(void)
             struct stat st;
             int ret = stat(path, &st);
             if (ret == 0) {
-                push_syscall_response(scf_buf, desc_index, st.st_size);
+                push_syscall_response(scf_buf, desc_index, st.st_size, is_uintr);
             } else {
-                push_syscall_response(scf_buf, desc_index, ret);
+                push_syscall_response(scf_buf, desc_index, ret, is_uintr);
             }
             break;
         }
         case IPC_OP_CLONE: {
             thread_count++;
-            push_syscall_response(scf_buf, desc_index, 0);
+            printf("cloned, thread count: %d\n", thread_count);
+            push_syscall_response(scf_buf, desc_index, 0, is_uintr);
             break;
         }
         case IPC_OP_EXIT: {
-            // printf("Shadow: exit, thread count: %d\n", thread_count);
             if (thread_count == 1) {
                 ioctl(nimbos_fd, NIMBOS_EXIT, NULL);
-                push_syscall_response(scf_buf, desc_index, 0);
+                push_syscall_response(scf_buf, desc_index, 0, is_uintr);
                 exit(0);
             } else {
                 thread_count--;
-                push_syscall_response(scf_buf, desc_index, 0);
+                push_syscall_response(scf_buf, desc_index, 0, is_uintr);
             }
             break;
         }
@@ -257,7 +265,7 @@ void poll_requests(void)
             // 3. 打印 UPID 地址
             // printf("Linux UPID address: 0x%llx\n", (unsigned long long)upid_addr);
 
-            push_syscall_response(scf_buf, desc_index, upid_addr);
+            push_syscall_response(scf_buf, desc_index, upid_addr, is_uintr);
             break;
         }
         default:
@@ -269,7 +277,8 @@ void poll_requests(void)
 static void nimbos_syscall_handler(int signum)
 {
     if (signum == NIMBOS_SYSCALL_SIG_NUM) {
-        poll_requests();
+        poll_requests(false);
+        // notify(false);
     }
 }
 
@@ -296,7 +305,8 @@ int nimbos_setup_syscall()
     signal(NIMBOS_SYSCALL_SIG_NUM, nimbos_syscall_handler);
 
     // handle requests before app starting
-    poll_requests();
+    poll_requests(false);
+    // notify(false);
     printf("syscall: slot_num=%d\n", slot_num);
 
     return fd;

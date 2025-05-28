@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <sys/mman.h>
 #include <x86gprintrin.h>
+#include <stdbool.h>
 
 #include "spin_lock.h"
 #include "remap.h"
@@ -79,10 +80,10 @@ struct scf_descriptor *get_syscall_request_from_index(struct syscall_queue_buffe
 int pop_syscall_request(struct syscall_queue_buffer *buf, uint16_t *out_index,
                         struct scf_descriptor *out_desc);
 int push_syscall_response(struct syscall_queue_buffer *buf, uint16_t index,
-                          uint64_t ret_val);
+                          uint64_t ret_val, bool is_uintr);
 
 int do_sys_write(uint64_t *args);
 
-void poll_requests(void);
+void poll_requests(bool is_uintr);
 
 #endif /* !_SCF_H */

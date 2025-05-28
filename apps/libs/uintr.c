@@ -20,7 +20,7 @@ void init_uintr_scf(struct uintr_scf_descriptor *desc, int uipi_ind) {
 void __attribute__ ((interrupt)) uintr_handler(struct __uintr_frame *ui_frame,
     unsigned long long vector)
 {
-    poll_requests();
+    poll_requests(true);
     // if (vector == 0) {
     //     static const char print[] = "\t-- Linux User Interrupt handler --\n";
     //     ssize_t ret = write(STDOUT_FILENO, print, sizeof(print) - 1);
@@ -88,5 +88,6 @@ void __attribute__ ((interrupt)) uintr_handler(struct __uintr_frame *ui_frame,
     //     ssize_t ret = write(STDOUT_FILENO, print, sizeof(print) - 1);
     //     (void)ret;
     // }
+    // notify(true);
     _stui();
 }
