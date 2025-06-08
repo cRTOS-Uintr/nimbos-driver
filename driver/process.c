@@ -16,7 +16,8 @@ struct process_node {
 
 static LIST_HEAD(process_list);
 
-int add_process(process_t process, int slot_num)
+// int add_process(process_t process, int slot_num)
+int add_process(process_t process, int slot_num, uint32_t *vector, uint32_t *dest)
 {
     struct process_node *h;
 
@@ -31,7 +32,9 @@ int add_process(process_t process, int slot_num)
     INIT_LIST_HEAD(&h->entry);
     h->process = process;
     h->slot_num = slot_num;
-    register_irq(slot_to_irq(slot_num));
+    // register_irq(slot_to_irq(slot_num));
+    int irq_num = slot_to_irq(slot_num);
+    register_irq(irq_num, vector, dest);
     list_add_tail(&h->entry, &process_list);
     pr_info("nimbos-driver: added process with slot: %d\n", slot_num);
 

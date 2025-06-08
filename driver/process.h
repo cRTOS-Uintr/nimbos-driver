@@ -3,7 +3,8 @@
 
 typedef struct task_struct * process_t;
 
-int add_process(process_t task, int irq_num);
+// int add_process(process_t task, int irq_num);
+int add_process(process_t task, int irq_num, uint32_t *vector, uint32_t *dest);
 int del_process(process_t task);
 void del_all_processes(void);
 void signal_all_processes(void);

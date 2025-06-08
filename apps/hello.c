@@ -35,7 +35,7 @@ int main()
 
     munmap((void*)NIMBOS_USER_STACK_BASE_VADDR, NIMBOS_USER_STACK_SIZE);
 
-    int fd = nimbos_setup_syscall();
+    int fd = nimbos_setup_syscall(&apic_data);
     if (fd <= 0) {
         printf("Failed to open NimbOS device `%s`\n", NIMBOS_DEV);
         return fd;

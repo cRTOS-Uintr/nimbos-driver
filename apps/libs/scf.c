@@ -32,7 +32,7 @@ static int nimbos_uitte = -1;
 static struct uintr_upid nimbos_upid = {
     .nc.status = 0, // ON
     .nc.nv = 41,     // Notification vector
-    .nc.ndst = (3<<8),   // Notification destination
+    .nc.ndst = 126,   // Notification destination
     .puir = 0,         // Posted user interrupt requests
 };
 
@@ -49,7 +49,9 @@ inline void set_slot_num(int slot_num) {
 }
 
 int register_sender(void) {
-    nimbos_uitte = uintr_register_sender(&nimbos_upid, 1<<9);
+    printf("Address of upid %p\n", &nimbos_upid);
+    // nimbos_uitte = uintr_register_sender(&nimbos_upid, 1<<9);
+    nimbos_uitte = uintr_register_sender(0x41fff000, (1<<9) |  (1 << 10));
     if (nimbos_uitte < 0) {
         fprintf(stderr, "Sender register error\n");
         return nimbos_uitte;
@@ -65,13 +67,14 @@ int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num, int *uintr_fd, uin
     if (err) {
         return err;
     }
+    // int err=0;
     err = uintr_register_handler(uintr_handler, 0);
     if (err) {
         fprintf(stderr, "Interrupt handler register error\n");
         return err;
     }
 
-    *uintr_fd = uintr_create_fd(0, 0);
+    *uintr_fd = uintr_vector_fd(0, 0);
     if (*uintr_fd < 0) {
         fprintf(stderr, "Interrupt vector allocation error\n");
         return *uintr_fd;
@@ -82,11 +85,12 @@ int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num, int *uintr_fd, uin
         close(*uintr_fd);
         return err;
     }
+    printf("UPID address: 0x%llx\n", (unsigned long long)*upid_addr);
 
     uint64_t syscall_queue_buf_paddr = NIMBOS_SYSCALL_QUEUE_BUF_SLOT_PADDR(slot_num);
     syscall_queue_buf_base = (void *)SHADOW_KERNEL_PADDR_TO_VADDR((void *)syscall_queue_buf_paddr);
 
-    // printf("Shadow: map [%x, %x)\n", SHADOW_KERNEL_PADDR_TO_VADDR(NIMBOS_KERNEL_BASE_PADDR), SHADOW_KERNEL_PADDR_TO_VADDR(NIMBOS_KERNEL_BASE_PADDR) + NIMBOS_KERNEL_MAXSIZE);
+    printf("Shadow: map [%x, %x)\n", SHADOW_KERNEL_PADDR_TO_VADDR(NIMBOS_KERNEL_BASE_PADDR), SHADOW_KERNEL_PADDR_TO_VADDR(NIMBOS_KERNEL_BASE_PADDR) + NIMBOS_KERNEL_MAXSIZE);
     void *nimbos_kernel_base = mmap(
         (void *)SHADOW_KERNEL_PADDR_TO_VADDR(NIMBOS_KERNEL_BASE_PADDR), NIMBOS_KERNEL_MAXSIZE,
         PROT_READ | PROT_WRITE,
@@ -103,8 +107,8 @@ int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num, int *uintr_fd, uin
     uint16_t *req_ring, *rsp_ring;
     uint16_t capacity = meta->capacity;
 
-    // printf("magic:%x cap:%d lock:%d req:%d rsp:%d\n", meta->magic, meta->capacity, meta->lock,
-    // meta->req_index, meta->rsp_index);
+    printf("magic:%x cap:%d lock:%d req:%d rsp:%d\n", meta->magic, meta->capacity, meta->lock,
+    meta->req_index, meta->rsp_index);
 
     if (meta->magic != SYSCALL_QUEUE_BUFFER_MAGIC) {
         return -EINVAL;
@@ -117,7 +121,7 @@ int nimbos_setup_syscall_buffers(int nimbos_fd, int slot_num, int *uintr_fd, uin
     req_ring = (void *)desc + capacity * sizeof(struct scf_descriptor);
     rsp_ring = (void *)req_ring + capacity * sizeof(uint16_t);
 
-    // printf("desc:%p req:%p rsp:%p\n", desc, req_ring, rsp_ring);
+    printf("desc:%p req:%p rsp:%p\n", desc, req_ring, rsp_ring);
 
     g_syscall_queue_buffer = (struct syscall_queue_buffer){
         .capacity_mask = capacity - 1,
@@ -187,9 +191,10 @@ end:
 void notify(bool is_uintr) {
     // is_uintr = false;
     if (is_uintr) {
-        nimbos_upid.nc.status = 0;
-        // printf("uintr scf done\n");
+        // nimbos_upid.nc.status = 0;
+        // printf("uintr notify start\n");
         _senduipi(nimbos_uitte);
+        // printf("uintr notify done\n");
     }
     else {
         ioctl(*get_nimbos_fd(), NIMBOS_NOTIFY);

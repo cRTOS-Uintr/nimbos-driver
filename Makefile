@@ -32,4 +32,5 @@ ifneq ($(shell lsmod | grep nimbos),)
 endif
 
 run: insmod
+	sleep 1
 	./apps/hello

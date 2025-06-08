@@ -20,9 +20,9 @@ shadow_physical_vm_ops = {
 #endif
 };
 
-static int nimbos_register_process(int slot_num)
+static int nimbos_register_process(int slot_num, uint32_t *vector, uint32_t *dest)
 {
-    return add_process(get_current(), slot_num);
+    return add_process(get_current(), slot_num, vector, dest);
 }
 
 static int nimbos_deregister_process(process_t process)
@@ -30,9 +30,9 @@ static int nimbos_deregister_process(process_t process)
     return del_process(process);
 }
 
-static int nimbos_syscall_setup(int slot_num)
+static int nimbos_syscall_setup(int slot_num, uint32_t *vector, uint32_t *dest)
 {
-    return nimbos_register_process(slot_num);
+    return nimbos_register_process(slot_num, vector, dest);
 }
 
 int nimbos_open(struct inode *inode, struct file *file)
@@ -48,6 +48,11 @@ int nimbos_close(struct inode *inode, struct file *file)
     return 0;
 }
 
+struct irq_info {
+    int slot_num;
+    uint32_t vector;
+    uint32_t dest;
+};
 
 long nimbos_ioctl(struct file *file, unsigned int ioctl, unsigned long arg)
 {
@@ -56,13 +61,16 @@ long nimbos_ioctl(struct file *file, unsigned int ioctl, unsigned long arg)
     switch (ioctl) {
     case NIMBOS_SYSCALL_SETUP: {
         int slot_num = allocate_slot_num();
+        uint32_t vector, dest;
         pr_info("Slot %d allocated.\n", slot_num);
         if (slot_num < 0) {
             err = -EBUSY;
             break;
         }
-        err = nimbos_syscall_setup(slot_num);
-        copy_to_user((int *)arg, (int *)&slot_num, sizeof(int));
+        err = nimbos_syscall_setup(slot_num, &vector, &dest);
+        copy_to_user(&(((struct irq_info *)arg)->slot_num), (int *)&slot_num, sizeof(int));
+        copy_to_user(&(((struct irq_info *)arg)->vector), &vector, sizeof(uint32_t));
+        copy_to_user(&(((struct irq_info *)arg)->dest), &dest, sizeof(uint32_t));
         break;
     }
     case NIMBOS_EXIT: {

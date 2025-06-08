@@ -67,6 +67,7 @@ static int start_rtos(void)
     void *nimbos_mem;
     
 	RESOLVE_EXTERNAL_SYMBOL(apic_send_IPI_allbutself);
+    RESOLVE_EXTERNAL_SYMBOL(irq_to_desc);
 
     pr_info("nimbos-driver: RT memory region: [0x%llx-0x%llx], 0x%llx\n", rt_region.start,
             rt_region.start + rt_region.size - 1, rt_region.size);
@@ -108,9 +109,13 @@ static int start_rtos(void)
 
     pr_info("Starting RTOS: entry=0x%llx, image_size=0x%lx\n", rt_region.start,
             nimbos_image->size);
+    pr_err("nimbos-driver: rvm_hypercall(RVM_HC_RT_START) with entry=0x%llx\n",
+          rt_region.start);
     err = rvm_hypercall_arg1(RVM_HC_RT_START, rt_region.start);
+    pr_err("nimbos-driver: rvm_hypercall(RVM_HC_RT_START) returns %d\n", err);
 
     release_firmware(nimbos_image);
+    pr_err("nimbos-driver: RTOS started successfully.\n");
     return 0;
 
 err_release_mem_region:
